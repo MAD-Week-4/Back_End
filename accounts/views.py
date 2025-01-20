@@ -28,7 +28,7 @@ class LoginView(APIView):
         if user is not None:
             # 세션에 사용자 정보 저장
             login(request, user)
-            return Response({"detail": "로그인 성공"}, status=status.HTTP_200_OK)
+            return Response({"detail": "로그인 성공", "success": True}, status=status.HTTP_200_OK)
         else:
             return Response({"detail": "로그인 실패"}, status=status.HTTP_401_UNAUTHORIZED)
 

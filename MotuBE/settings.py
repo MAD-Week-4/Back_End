@@ -25,12 +25,20 @@ SECRET_KEY = 'django-insecure-_ky8(*7)kq8^orsk%tsc%z%l-wbq)3f%u+rg600rh7meks83=7
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # React 개발 서버 도메인
+]
+CORS_ALLOW_CREDENTIALS = True  # 쿠키 및 인증 정보 허용
+
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -50,6 +58,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # CORS 미들웨어 추가
+    'django.middleware.common.CommonMiddleware',
 ]
 
 ROOT_URLCONF = 'MotuBE.urls'
