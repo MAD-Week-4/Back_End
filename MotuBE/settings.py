@@ -29,13 +29,17 @@ ALLOWED_HOSTS = ['*']
 
 
 # Application definition
-CORS_ALLOW_ALL_ORIGINS = True
-
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # React 개발 서버 도메인
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 CORS_ALLOW_CREDENTIALS = True  # 쿠키 및 인증 정보 허용
-
+SESSION_COOKIE_SAMESITE = None
 
 INSTALLED_APPS = [
     'corsheaders',
@@ -51,6 +55,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # CORS 미들웨어 추가
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -58,7 +63,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # CORS 미들웨어 추가
     'django.middleware.common.CommonMiddleware',
 ]
 
