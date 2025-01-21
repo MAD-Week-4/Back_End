@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     StartGameView, NextDayDataView,
-    BuyStockView, SellStockView, NetWorthView
+    BuyStockView, SellStockView, NetWorthView, GetGameStockDataView
 )
 
 urlpatterns = [
@@ -11,4 +11,6 @@ urlpatterns = [
     path('<int:game_id>/sell/', SellStockView.as_view(), name='sell_stock'),
 
     path('<int:game_id>/net-worth/', NetWorthView.as_view(), name='net_worth'),
+
+    path('<int:game_id>/get-stock/', GetGameStockDataView.as_view(), name='get_stock'),
 ]

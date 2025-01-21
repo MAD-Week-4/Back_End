@@ -55,6 +55,7 @@ class StartGameView(APIView):
 
                 all_data.append({
                     "stock": symbol.name,
+                    "stock_id": symbol.id,
                     "data": data_for_response
                 })
 
@@ -63,6 +64,49 @@ class StartGameView(APIView):
             "game_id": game.id,
             "game_name": game.name,
             "initial_capital": game.capital,
+            "data": all_data
+        }, status=status.HTTP_200_OK)
+
+class GetGameStockDataView(APIView):
+    """
+    특정 game_id에 해당하는 StockDailyData를 종목별로 가져옵니다.
+    """
+    def get(self, request, game_id):
+        try:
+            # 게임이 존재하는지 확인
+            game = Game.objects.get(id=game_id)
+        except Game.DoesNotExist:
+            return Response({"message": "Game not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        all_data = []
+
+        # 모든 종목 가져오기
+        symbols = StockSymbol.objects.all()
+
+        # 각 종목에 대한 데이터 가져오기
+        for symbol in symbols:
+            stock_data = StockDailyData.objects.filter(game=game, stock=symbol).order_by('date')
+            data_for_response = []
+
+            for daily in stock_data:
+                data_for_response.append({
+                    "stock": daily.stock.name,
+                    "date": daily.date,
+                    "open_price": daily.open_price,
+                    "close_price": daily.close_price,
+                    "upper_limit": daily.upper_limit,
+                    "lower_limit": daily.lower_limit
+                })
+
+            if data_for_response:  # 해당 종목에 데이터가 있을 경우만 추가
+                all_data.append({
+                    "stock": symbol.name,
+                    "stock_id": symbol.id,
+                    "data": data_for_response
+                })
+
+        return Response({
+            "message": "Stock data for the game retrieved successfully.",
             "data": all_data
         }, status=status.HTTP_200_OK)
 
@@ -122,9 +166,7 @@ class BuyStockView(APIView):
     요청 형식:
     {
         "stock_id": 1,
-        "price": 100,
         "quantity": 10,
-        "date": "2023-09-01"
     }
     """
     def post(self, request, game_id):
@@ -136,12 +178,18 @@ class BuyStockView(APIView):
         except Game.DoesNotExist:
             return Response({"detail": "Game not found."}, status=status.HTTP_404_NOT_FOUND)
 
-
         stock_id = request.data.get('stock_id')
-        price = float(request.data.get('price', 0))
         quantity = int(request.data.get('quantity', 0))
-        date_str = request.data.get('date')
 
+        # 가장 최근 StockDailyData 가져오기
+        try:
+            stock = StockSymbol.objects.get(id=stock_id)
+            latest_data = StockDailyData.objects.filter(game=game, stock=stock).latest('date')
+        except (StockSymbol.DoesNotExist, StockDailyData.DoesNotExist):
+            return Response({"detail": "Stock or data not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        price = latest_data.close_price
+        date_str = latest_data.date
 
         if not (stock_id and price > 0 and quantity > 0 and date_str):
             return Response({"detail": "Invalid data"}, status=status.HTTP_400_BAD_REQUEST)
@@ -177,6 +225,7 @@ class BuyStockView(APIView):
             "message": "Buy success",
             "capital_after_buy": game.capital,
             "holding_quantity": holding.quantity,
+            "stock_id": stock_id,
         }, status=status.HTTP_200_OK)
 
 class SellStockView(APIView):
@@ -198,9 +247,17 @@ class SellStockView(APIView):
             return Response({"detail": "Game not found"}, status=404)
 
         stock_id = request.data.get('stock_id')
-        price = float(request.data.get('price', 0))
         quantity = int(request.data.get('quantity', 0))
-        date_str = request.data.get('date')
+
+        # 가장 최근 StockDailyData 가져오기
+        try:
+            stock = StockSymbol.objects.get(id=stock_id)
+            latest_data = StockDailyData.objects.filter(game=game, stock=stock).latest('date')
+        except (StockSymbol.DoesNotExist, StockDailyData.DoesNotExist):
+            return Response({"detail": "Stock or data not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        price = latest_data.close_price
+        date_str = latest_data.date
 
         if not (stock_id and price > 0 and quantity > 0 and date_str):
             return Response({"detail": "Invalid data"}, status=status.HTTP_400_BAD_REQUEST)
@@ -239,8 +296,11 @@ class SellStockView(APIView):
         return Response({
             "message": "Sell success",
             "capital_after_sell": game.capital,
-            "holding_quantity": holding.quantity
+            "holding_quantity": holding.quantity,
+            "stock_id": stock_id,
         }, status=200)
+
+
 
 class NetWorthView(APIView):
     def get(self, request, game_id):
