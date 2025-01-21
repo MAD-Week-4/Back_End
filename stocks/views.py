@@ -28,7 +28,7 @@ class StartGameView(APIView):
             all_data = []
             # 각 종목에 대해 30일치 랜덤 데이터 생성
             for symbol in symbols:
-                random_data = generate_random_stock_data(symbol, 30)
+                random_data = generate_random_stock_data(symbol, 500)
                 for daily in random_data:
                     StockDailyData.objects.create(
                         game=game,
