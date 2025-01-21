@@ -10,10 +10,22 @@ class Game(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="games")
     name = models.CharField(max_length=100, default="My Investment Game")
     capital = models.FloatField(default=1000000)
+    profit_rate = models.FloatField(default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Game {self.id} by {self.user.username}"
+
+    def update_profit_rate(self):
+        """
+        자본(capital)에 따라 현재 수익률을 갱신.
+        초기 자본 대비 현재 자본 기준 계산:
+            수익률(%) = ((현재 자본 - 초기 자본) / 초기 자본) * 100
+        """
+        initial_capital = 1000000  # 초기 자본 값
+        self.profit_rate = ((self.capital - initial_capital) / initial_capital) * 100
+        self.save()
+
 
 # Create your models here.
 class StockSymbol(models.Model):

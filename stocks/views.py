@@ -234,9 +234,12 @@ class BuyStockView(APIView):
             is_buy=True
         )
 
+        game.update_profit_rate()
+
         return Response({
             "message": "Buy success",
             "capital_after_buy": game.capital,
+            "profit_rate": game.profit_rate,
             "holding_quantity": holding.quantity,
             "stock_id": stock_id,
         }, status=status.HTTP_200_OK)
@@ -306,9 +309,12 @@ class SellStockView(APIView):
             is_buy=False
         )
 
+        game.update_profit_rate()
+
         return Response({
             "message": "Sell success",
             "capital_after_sell": game.capital,
+            "profit_rate": game.profit_rate,
             "holding_quantity": holding.quantity,
             "stock_id": stock_id,
         }, status=200)
@@ -342,6 +348,7 @@ class NetWorthView(APIView):
             "latest_date": str(latest_date),
             "capital": game.capital,
             "stock_value": total_shares_value,
+            "profit_rate": game.profit_rate,
             "net_worth": net_worth
         })
 
@@ -366,6 +373,8 @@ class UserTradeLogView(APIView):
             all_trade_logs.append({
                 "game_id": game.id,
                 "game_name": game.name,
+                "game_start_data": game.created_at.date(),
+                "profit_rate": game.profit_rate,
                 "logs": serialized_logs
             })
 
