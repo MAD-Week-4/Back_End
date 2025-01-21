@@ -20,4 +20,4 @@ class TradeLogSerializer(serializers.ModelSerializer):
     stock = StockSymbolSerializer(read_only=True)
     class Meta:
         model = TradeLog
-        fields = ['user','game' ,'stock', 'date', 'price', 'quantity', 'is_buy', 'created_at']
+        fields = ['id','user','game' ,'stock', 'date', 'price', 'quantity', 'is_buy', 'created_at']

@@ -3,6 +3,8 @@ from django.shortcuts import render
 from .models import StockSymbol, StockDailyData,TradeLog, Game, UserStockHolding
 from accounts.models import Profile
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
@@ -78,6 +80,16 @@ class GetGameStockDataView(APIView):
         except Game.DoesNotExist:
             return Response({"message": "Game not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        # StockDailyData에서 가장 최신 날짜 가져오기
+        latest_stock_date = StockDailyData.objects.filter(game=game).order_by('-date').first()
+
+        if latest_stock_date:
+            # 게임 생성일과 비교한 경과 날짜 계산
+            days_elapsed = (latest_stock_date.date - game.created_at.date()).days
+        else:
+            # StockDailyData가 없는 경우 경과 날짜는 0
+            days_elapsed = 0
+
         all_data = []
 
         # 모든 종목 가져오기
@@ -107,6 +119,7 @@ class GetGameStockDataView(APIView):
 
         return Response({
             "message": "Stock data for the game retrieved successfully.",
+            "days_elapsed": days_elapsed,
             "data": all_data
         }, status=status.HTTP_200_OK)
 
@@ -330,4 +343,33 @@ class NetWorthView(APIView):
             "capital": game.capital,
             "stock_value": total_shares_value,
             "net_worth": net_worth
+        })
+
+class UserTradeLogView(APIView):
+    """
+    로그인한 유저의 TradeLog를 게임별로 반환하는 View
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        # 유저가 참여한 모든 게임 가져오기
+        games = Game.objects.filter(user=user)
+
+        # 게임별로 TradeLog 데이터를 그룹화
+        all_trade_logs = []
+        for game in games:
+            trade_logs = TradeLog.objects.filter(user=user, game=game)
+            serialized_logs = TradeLogSerializer(trade_logs, many=True).data
+
+            all_trade_logs.append({
+                "game_id": game.id,
+                "game_name": game.name,
+                "logs": serialized_logs
+            })
+
+        return Response({
+            "message": "User's trade logs organized by game.",
+            "trade_logs": all_trade_logs
         })
