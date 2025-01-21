@@ -1,5 +1,6 @@
 from django.shortcuts import render
 
+from .AIDecisionMaker import AIDecisionMaker
 from .models import StockSymbol, StockDailyData,TradeLog, Game, UserStockHolding
 from accounts.models import Profile
 from rest_framework.views import APIView
@@ -165,11 +166,25 @@ class NextDayDataView(APIView):
                 )
                 created_data.append(daily_data)
 
+        # 2) AIDecisionMaker를 사용하여 AI의 LSTM 기반 결정 수행
+        ai_decision_maker = AIDecisionMaker(game=game)
+        decisions = []
+        for daily_data in created_data:
+            # 매수/매도/관망 결정을 위해 과거 30일 데이터를 가져옵니다.
+            stock_data = StockDailyData.objects.filter(
+                game=game, stock=daily_data.stock
+            ).order_by('-date')  # 최근 30일 데이터 (최신 날짜부터)
+
+            # LSTM 기반 결정
+            action = ai_decision_maker.decide_lstm_based_action(stock_data=stock_data)
+            decisions.append({"stock": daily_data.stock.name, "action": action})
+
         serializer = StockDailyDataSerializer(created_data, many=True)
         return Response({
             "message": "Next day data generated.",
             "next_day": str(next_day),
-            "stocks": serializer.data
+            "stocks": serializer.data,
+            "ai_decisions": decisions
         }, status=status.HTTP_200_OK)
 
 
