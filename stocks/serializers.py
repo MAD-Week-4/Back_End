@@ -24,12 +24,8 @@ class TradeLogSerializer(serializers.ModelSerializer):
 
 
 class AiTradeLogSerializer(serializers.ModelSerializer):
-    stock = serializers.CharField(source='stock.name')
-    action = serializers.SerializerMethodField()
+    stock = StockSymbolSerializer(read_only=True)
 
     class Meta:
         model = AiTradeLog
-        fields = ['stock', 'date', 'price', 'quantity', 'action', 'created_at']
-
-    def get_action(self, obj):
-        return "BUY" if obj.is_buy else "SELL"
+        fields = ['game','stock', 'date', 'price', 'quantity', 'is_buy', 'created_at']
