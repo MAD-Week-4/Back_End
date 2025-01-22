@@ -1,7 +1,7 @@
 from django.shortcuts import render
 
 from .AIDecisionMaker import AIDecisionMaker
-from .models import StockSymbol, StockDailyData,TradeLog, Game, UserStockHolding
+from .models import StockSymbol, StockDailyData,TradeLog, Game, UserStockHolding, AiStockHolding, AiTradeLog
 from accounts.models import Profile
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -13,7 +13,7 @@ from .utils import generate_random_stock_data
 from datetime import date, timedelta
 import random
 
-from .serializers import StockDailyDataSerializer, StockSymbolSerializer, TradeLogSerializer
+from .serializers import StockDailyDataSerializer, StockSymbolSerializer, TradeLogSerializer, AiTradeLogSerializer
 
 class StartGameView(APIView):
     """
@@ -128,6 +128,7 @@ class NextDayDataView(APIView):
     """
     가장 최근 StockDailyData 날짜 + 1일짜리 데이터를 생성하고 DB에 추가한 뒤 반환.
     """
+
     def post(self, request, game_id):
         user = request.user
         try:
@@ -148,7 +149,60 @@ class NextDayDataView(APIView):
         symbols = StockSymbol.objects.all()
         created_data = []
 
+        # 2) 과거 데이터를 기반으로 AI의 행동 결정 수행
+        ai_decision_maker = AIDecisionMaker(game=game)
+        decisions = []
+
         with transaction.atomic():
+            # 기존 데이터를 AI가 분석하고 행동을 결정
+            for symbol in symbols:
+                # 과거 데이터를 가져옴
+                stock_data = StockDailyData.objects.filter(
+                    game=game, stock=symbol
+                ).order_by('date')  # 과거 데이터를 정렬 (오름차순)
+
+                if stock_data.exists():
+                    # LSTM 기반 결정 (현재까지의 데이터를 사용)
+                    action = ai_decision_maker.decide_lstm_based_action(stock_data=stock_data)
+                else:
+                    action = "HOLD"  # 데이터가 없는 경우 관망
+
+                # AI 주식 보유 상태 가져오기
+                ai_holding, _ = AiStockHolding.objects.get_or_create(game=game, stock=symbol)
+
+                if action == "BUY" and game.ai_capital >= stock_data.last().close_price:
+                    game.ai_capital -= stock_data.last().close_price  # 최신 종가 사용
+                    ai_holding.quantity += 1
+                    ai_holding.save()
+
+                    # 거래 내역 기록
+                    AiTradeLog.objects.create(
+                        game=game,
+                        stock=symbol,
+                        date=latest_data.date if latest_data else next_day,
+                        price=stock_data.last().close_price,
+                        quantity=1,
+                        is_buy=True,
+                    )
+
+                elif action == "SELL" and ai_holding.quantity > 0:
+                    game.ai_capital += stock_data.last().close_price  # 최신 종가 사용
+                    ai_holding.quantity -= 1
+                    ai_holding.save()
+
+                    # 거래 내역 기록
+                    AiTradeLog.objects.create(
+                        game=game,
+                        stock=symbol,
+                        date=latest_data.date if latest_data else next_day,
+                        price=stock_data.last().close_price,
+                        quantity=1,
+                        is_buy=False,
+                    )
+
+                decisions.append({"stock": symbol.name, "action": action})
+
+            # 새로운 날의 주가 데이터를 생성
             for symbol in symbols:
                 open_price = random.uniform(90, 110)
                 close_price = open_price * random.uniform(0.95, 1.05)
@@ -166,26 +220,18 @@ class NextDayDataView(APIView):
                 )
                 created_data.append(daily_data)
 
-        # 2) AIDecisionMaker를 사용하여 AI의 LSTM 기반 결정 수행
-        ai_decision_maker = AIDecisionMaker(game=game)
-        decisions = []
-        for daily_data in created_data:
-            # 매수/매도/관망 결정을 위해 과거 30일 데이터를 가져옵니다.
-            stock_data = StockDailyData.objects.filter(
-                game=game, stock=daily_data.stock
-            ).order_by('-date')  # 최근 30일 데이터 (최신 날짜부터)
-
-            # LSTM 기반 결정
-            action = ai_decision_maker.decide_lstm_based_action(stock_data=stock_data)
-            decisions.append({"stock": daily_data.stock.name, "action": action})
-
+        game.update_profit_rate()
+        game.update_ai_profit_rate()
         serializer = StockDailyDataSerializer(created_data, many=True)
         return Response({
             "message": "Next day data generated.",
             "next_day": str(next_day),
             "stocks": serializer.data,
-            "ai_decisions": decisions
+            "ai_decisions": decisions,
+            "user_profit_rate": game.profit_rate,
+            "ai_profit_rate": game.ai_profit_rate,
         }, status=status.HTTP_200_OK)
+
 
 
 class BuyStockView(APIView):
@@ -359,12 +405,32 @@ class NetWorthView(APIView):
                 total_shares_value += latest_data.close_price * hold.quantity
 
         net_worth = game.capital + total_shares_value
+
+        # AI의 주식 가치 계산
+        ai_total_shares_value = 0
+        ai_holdings = AiStockHolding.objects.filter(game=game)  # AI 보유 주식
+        for ai_hold in ai_holdings:
+            # 해당 종목의 최신 주가 (close_price 기준)
+            latest_data = StockDailyData.objects.filter(
+                game=game, stock=ai_hold.stock, date=latest_date
+            ).first()
+            if latest_data:
+                ai_total_shares_value += latest_data.close_price * ai_hold.quantity
+
+        # AI 총 자산 가치 = 현금 + 주식 가치
+        ai_net_worth = game.ai_capital + ai_total_shares_value
+
         return Response({
             "latest_date": str(latest_date),
             "capital": game.capital,
             "stock_value": total_shares_value,
             "profit_rate": game.profit_rate,
-            "net_worth": net_worth
+            "net_worth": net_worth,
+            # AI 관련 정보 추가
+            "ai_capital": game.ai_capital,
+            "ai_stock_value": ai_total_shares_value,
+            "ai_net_worth": ai_net_worth,
+            "ai_profit_rate": game.ai_profit_rate
         })
 
 class UserTradeLogView(APIView):
@@ -396,4 +462,35 @@ class UserTradeLogView(APIView):
         return Response({
             "message": "User's trade logs organized by game.",
             "trade_logs": all_trade_logs
+        })
+
+class AiTradeLogView(APIView):
+    """
+    AI의 TradeLog를 게임별로 반환하는 View
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        # 유저가 참여한 모든 게임 가져오기
+        games = Game.objects.filter(user=user)
+
+        # 게임별로 AiTradeLog 데이터를 그룹화
+        all_ai_trade_logs = []
+        for game in games:
+            ai_trade_logs = AiTradeLog.objects.filter(game=game)
+            serialized_logs = AiTradeLogSerializer(ai_trade_logs, many=True).data
+
+            all_ai_trade_logs.append({
+                "game_id": game.id,
+                "game_name": game.name,
+                "game_start_date": game.created_at.date(),
+                "ai_profit_rate": game.ai_profit_rate,
+                "logs": serialized_logs
+            })
+
+        return Response({
+            "message": "AI's trade logs organized by game.",
+            "ai_trade_logs": all_ai_trade_logs
         })

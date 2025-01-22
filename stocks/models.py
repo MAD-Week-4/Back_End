@@ -11,6 +11,8 @@ class Game(models.Model):
     name = models.CharField(max_length=100, default="My Investment Game")
     capital = models.FloatField(default=1000000)
     profit_rate = models.FloatField(default=0.0)
+    ai_capital = models.FloatField(default=1000000)
+    ai_profit_rate = models.FloatField(default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -18,12 +20,58 @@ class Game(models.Model):
 
     def update_profit_rate(self):
         """
-        자본(capital)에 따라 현재 수익률을 갱신.
-        초기 자본 대비 현재 자본 기준 계산:
-            수익률(%) = ((현재 자본 - 초기 자본) / 초기 자본) * 100
+        자본(capital)과 주식 자산을 합산하여 현재 수익률을 갱신.
+        초기 자본 대비 총 자산 기준 계산:
+            총 자산 = 현금(capital) + 보유 주식 자산
+            수익률(%) = ((총 자산 - 초기 자본) / 초기 자본) * 100
         """
-        initial_capital = 1000000  # 초기 자본 값
-        self.profit_rate = ((self.capital - initial_capital) / initial_capital) * 100
+        # 초기 자본
+        initial_capital = 1000000  # 초기 투자 금액
+
+        # 현재 보유 주식 자산 계산
+        total_stock_value = 0
+        holdings = self.stock_holdings.all()  # UserStockHolding 모델 관련
+
+        for holding in holdings:
+            # 각 주식의 최신 종가를 기준으로 자산 계산
+            latest_price_data = holding.stock.daily_data.filter(game=self).order_by('-date').first()
+            if latest_price_data:
+                total_stock_value += latest_price_data.close_price * holding.quantity
+
+        # 총 자산 = 현금 + 보유 주식 자산
+        total_assets = self.capital + total_stock_value
+
+        # 수익률 계산
+        self.profit_rate = ((total_assets - initial_capital) / initial_capital) * 100
+        self.save()
+
+    def update_ai_profit_rate(self):
+        """
+        AI 자본(ai_capital)과 보유 주식 자산을 합산하여 AI의 수익률을 갱신.
+        초기 자본 대비 총 자산 기준 계산:
+            총 자산 = 현금(ai_capital) + 보유 주식 자산
+            수익률(%) = ((총 자산 - 초기 자본) / 초기 자본) * 100
+        """
+        # 초기 자본
+        initial_capital = 1000000  # AI 초기 투자 금액
+
+        # 현재 AI 보유 주식 자산 계산
+        total_stock_value = 0
+        holdings = self.ai_stock_holdings.all()  # AiStockHolding 모델 관련
+
+        for holding in holdings:
+            # 각 주식의 최신 종가를 바탕으로 자산 계산
+            latest_price_data = StockDailyData.objects.filter(
+                game=self, stock=holding.stock
+            ).order_by('-date').first()
+            if latest_price_data:
+                total_stock_value += latest_price_data.close_price * holding.quantity
+
+        # 총 자산 = 현금 + 보유 주식 자산
+        total_assets = self.ai_capital + total_stock_value
+
+        # 수익률 계산
+        self.ai_profit_rate = ((total_assets - initial_capital) / initial_capital) * 100
         self.save()
 
 
@@ -51,6 +99,21 @@ class UserStockHolding(models.Model):
 
     def __str__(self):
         return f"{self.user.username} / {self.game.name} / {self.stock.name} : {self.quantity}"
+
+class AiStockHolding(models.Model):
+    """
+    AI가 특정 게임에서 특정 종목을 몇 주(수량) 보유하고 있는지를 나타냄
+    """
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='ai_stock_holdings')
+    stock = models.ForeignKey(StockSymbol, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('game', 'stock')
+
+    def __str__(self):
+        return f"AI / {self.game.name} / {self.stock.name} : {self.quantity}"
+
 
 class StockDailyData(models.Model):
     """
@@ -87,3 +150,18 @@ class TradeLog(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.stock.name} - {self.date} - {'BUY' if self.is_buy else 'SELL'}"
+
+class AiTradeLog(models.Model):
+    """
+    AI의 매수/매도 거래 내역을 추적하는 모델
+    """
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="ai_trades")
+    stock = models.ForeignKey(StockSymbol, on_delete=models.CASCADE)
+    date = models.DateField()
+    price = models.FloatField()
+    quantity = models.IntegerField()
+    is_buy = models.BooleanField()  # 매수(True) or 매도(False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"AI - {self.stock.name} - {self.date} - {'BUY' if self.is_buy else 'SELL'}"
