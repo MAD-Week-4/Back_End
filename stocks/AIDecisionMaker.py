@@ -82,10 +82,10 @@ class AIDecisionMaker:
         last_close_price = prices[-1]  # 마지막 날 종가
         predicted_price_delta = predicted_price - last_close_price
 
-        if predicted_price_delta > last_close_price * 0.05:  # 5% 이상 상승 예측 시 매도
-            return "SELL"
-        elif predicted_price_delta < -last_close_price * 0.05:  # 5% 이상 하락 예측 시 매수
+        if predicted_price_delta > last_close_price * 0.02:  # 5% 이상 상승 예측 시 매도
             return "BUY"
+        elif predicted_price_delta < -last_close_price * 0.02:  # 5% 이상 하락 예측 시 매수
+            return "SELL"
         else:
             return "HOLD"  # 5% 이내의 가격 변화는 관망
 

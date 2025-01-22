@@ -170,45 +170,98 @@ class NextDayDataView(APIView):
                 # AI 주식 보유 상태 가져오기
                 ai_holding, _ = AiStockHolding.objects.get_or_create(game=game, stock=symbol)
 
-                if action == "BUY" and game.ai_capital >= stock_data.last().close_price:
-                    game.ai_capital -= stock_data.last().close_price  # 최신 종가 사용
-                    ai_holding.quantity += 1
-                    ai_holding.save()
+                if action == "BUY":
+                    # 매수 가능한 최대 주식 수 계산
+                    max_buy_quantity = int(game.ai_capital // stock_data.last().close_price)
+                    buy_quantity = random.randint(1, max_buy_quantity)  # 1 ~ 10주 사이 랜덤 매수
+                    if buy_quantity > 0 and game.ai_capital >= buy_quantity * stock_data.last().close_price:
+                        game.ai_capital -= buy_quantity * stock_data.last().close_price
+                        ai_holding.quantity += buy_quantity
+                        ai_holding.save()
 
-                    # 거래 내역 기록
-                    AiTradeLog.objects.create(
-                        game=game,
-                        stock=symbol,
-                        date=latest_data.date if latest_data else next_day,
-                        price=stock_data.last().close_price,
-                        quantity=1,
-                        is_buy=True,
-                    )
+                        # 거래 내역 기록
+                        AiTradeLog.objects.create(
+                            game=game,
+                            stock=symbol,
+                            date=latest_data.date if latest_data else next_day,
+                            price=stock_data.last().close_price,
+                            quantity=buy_quantity,
+                            is_buy=True,
+                        )
 
-                elif action == "SELL" and ai_holding.quantity > 0:
-                    game.ai_capital += stock_data.last().close_price  # 최신 종가 사용
-                    ai_holding.quantity -= 1
-                    ai_holding.save()
+                elif action == "SELL":
+                    # 매도 가능한 최대 주식 수 계산
+                    max_sell_quantity = ai_holding.quantity
+                    sell_quantity = 0
+                    if max_sell_quantity > 0:  # 매도 가능한 주식이 있는지 확인
+                        sell_quantity = random.randint(1, max_sell_quantity)  # 1 ~ 10주 사이 랜덤 매도
+                        if ai_holding.quantity >= sell_quantity:
+                            game.ai_capital += sell_quantity * stock_data.last().close_price
+                            ai_holding.quantity -= sell_quantity
+                            ai_holding.save()
 
-                    # 거래 내역 기록
-                    AiTradeLog.objects.create(
-                        game=game,
-                        stock=symbol,
-                        date=latest_data.date if latest_data else next_day,
-                        price=stock_data.last().close_price,
-                        quantity=1,
-                        is_buy=False,
-                    )
+                            # 거래 내역 기록
+                            AiTradeLog.objects.create(
+                                game=game,
+                                stock=symbol,
+                                date=latest_data.date if latest_data else next_day,
+                                price=stock_data.last().close_price,
+                                quantity=sell_quantity,
+                                is_buy=False,
+                            )
+                        else:
+                            sell_quantity = 0  # 매도 실패 시 기록용
 
-                decisions.append({"stock": symbol.name, "action": action})
+                decisions.append({
+                    "stock": symbol.name,
+                    "action": action,
+                    "quantity": buy_quantity if action == "BUY" else (sell_quantity if action == "SELL" else 0)
+                })
 
             # 새로운 날의 주가 데이터를 생성
             for symbol in symbols:
-                open_price = random.uniform(90, 110)
-                close_price = open_price * random.uniform(0.95, 1.05)
-                lower_limit = min(open_price, close_price) * 0.9
-                upper_limit = max(open_price, close_price) * 1.1
+                # 기존 데이터를 가져오기
+                stock_data = StockDailyData.objects.filter(
+                    game=game, stock=symbol
+                ).order_by('date')
 
+                # 이전 종가를 기준으로 다음 날 데이터 생성
+                if stock_data.exists():
+                    prev_close_price = stock_data.last().close_price
+                else:
+                    prev_close_price = 100.0  # 기본 시작 가격
+
+                # 현실적인 랜덤 데이터를 생성
+                trend = random.uniform(-0.03, 0.03)  # 소폭 상승/하락 추세
+                volatility = 0.02  # 초깃값 변동성
+                daily_trend = random.gauss(trend, volatility)
+                close_price = prev_close_price * (1 + daily_trend)
+                close_price = max(close_price, 1.0)  # 음수 방지
+
+                # open_price 계산
+                amplitude_factor = abs(trend) + 1.5  # 추세 영향을 고려
+                if trend >= 0:  # 상승 추세
+                    open_price = close_price * random.uniform(1 - 0.02 * amplitude_factor, 1 + 0.03 * amplitude_factor)
+                else:  # 하락 추세
+                    open_price = close_price * random.uniform(1 - 0.03 * amplitude_factor, 1 + 0.02 * amplitude_factor)
+
+                # 최소 시가/종가 차이를 보장
+                if abs(open_price - close_price) < 1.0:
+                    if open_price > close_price:
+                        open_price += 1.0
+                    else:
+                        close_price += 1.0
+
+                # 상한가 및 하한가 계산
+                tail_factor = random.uniform(1 - 0.02 * amplitude_factor, 1 + 0.02 * amplitude_factor)
+                lower_limit = min(open_price, close_price) * tail_factor * 0.95
+                upper_limit = max(open_price, close_price) * tail_factor * 1.05
+
+                # 상한가와 하한가 범위 제한
+                lower_limit = max(lower_limit, close_price * 0.8)
+                upper_limit = min(upper_limit, close_price * 1.2)
+
+                # 데이터 저장
                 daily_data = StockDailyData.objects.create(
                     game=game,
                     stock=symbol,
