@@ -187,6 +187,7 @@ class NextDayDataView(APIView):
                             price=stock_data.last().close_price,
                             quantity=buy_quantity,
                             is_buy=True,
+                            profit=game.ai_profit_rate
                         )
 
                 elif action == "SELL":
@@ -208,6 +209,7 @@ class NextDayDataView(APIView):
                                 price=stock_data.last().close_price,
                                 quantity=sell_quantity,
                                 is_buy=False,
+                                profit=game.ai_profit_rate
                             )
                         else:
                             sell_quantity = 0  # 매도 실패 시 기록용
@@ -345,7 +347,8 @@ class BuyStockView(APIView):
             date=date_str,
             price=price,
             quantity=quantity,
-            is_buy=True
+            is_buy=True,
+            profit=game.profit_rate
         )
 
         game.update_profit_rate()
@@ -420,7 +423,8 @@ class SellStockView(APIView):
             date=date_str,
             price=price,
             quantity=quantity,
-            is_buy=False
+            is_buy=False,
+            profit=game.profit_rate,
         )
 
         game.update_profit_rate()

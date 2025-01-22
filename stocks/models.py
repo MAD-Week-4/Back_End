@@ -147,6 +147,7 @@ class TradeLog(models.Model):
     quantity = models.IntegerField()
     is_buy = models.BooleanField()  # 매수(True) or 매도(False)
     created_at = models.DateTimeField(auto_now_add=True)
+    profit = models.FloatField(default=0.0)
 
     def __str__(self):
         return f"{self.user.username} - {self.stock.name} - {self.date} - {'BUY' if self.is_buy else 'SELL'}"
@@ -162,6 +163,7 @@ class AiTradeLog(models.Model):
     quantity = models.IntegerField()
     is_buy = models.BooleanField()  # 매수(True) or 매도(False)
     created_at = models.DateTimeField(auto_now_add=True)
+    profit = models.FloatField(default=0.0)
 
     def __str__(self):
         return f"AI - {self.stock.name} - {self.date} - {'BUY' if self.is_buy else 'SELL'}"
