@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     StartGameView, NextDayDataView,
-    BuyStockView, SellStockView, NetWorthView, GetGameStockDataView, UserTradeLogView, AiTradeLogView
+    BuyStockView, SellStockView, NetWorthView, GetGameStockDataView, UserTradeLogView, AiTradeLogView, UserStockHoldingsView
 )
 
 urlpatterns = [
@@ -17,4 +17,5 @@ urlpatterns = [
     path('trade-logs/', UserTradeLogView.as_view(), name='trade_logs' ),
 
     path('ai-trade-logs/', AiTradeLogView.as_view(), name='ai_trade_logs' ),
+    path('<int:game_id>/user-stock-data/', UserStockHoldingsView.as_view(), name='user_stock_data' ),
 ]

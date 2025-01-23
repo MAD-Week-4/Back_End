@@ -551,3 +551,40 @@ class AiTradeLogView(APIView):
             "message": "AI's trade logs organized by game.",
             "ai_trade_logs": all_ai_trade_logs
         })
+        
+class UserStockHoldingsView(APIView):
+    """
+    특정 게임 ID에 해당하는 유저의 보유 주식 데이터를 반환하는 View
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, game_id):
+        user = request.user
+
+        # URL에서 받은 game_id에 해당하는 Game 인스턴스 가져오기
+        try:
+            game = Game.objects.get(id=game_id, user=user)
+        except Game.DoesNotExist:
+            return Response({"message": "Game not found or you don't have permission to access this game."}, status=404)
+
+        # 해당 게임에서 유저의 보유 주식 데이터를 가져오기
+        user_holdings = UserStockHolding.objects.filter(game=game, user=user)
+        if not user_holdings.exists():
+            return Response({"message": f"No stock holdings found for the game (ID: {game_id})."}, status=200)
+
+        # 보유 주식 데이터를 정리해서 반환
+        holdings = []
+        for holding in user_holdings:
+            holdings.append({
+                "stock_name": holding.stock.name,
+                "quantity": holding.quantity
+            })
+
+        return Response({
+            "message": f"Stock holdings for game '{game.name}' retrieved successfully.",
+            "game_id": game.id,
+            "game_name": game.name,
+            "capital": game.capital,
+            "profit_rate": game.profit_rate,
+            "holdings": holdings
+        }, status=200)
